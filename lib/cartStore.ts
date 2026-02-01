@@ -1,9 +1,9 @@
 
-import { create } from 'https://esm.sh/zustand@^5.0.3';
-import { persist } from 'https://esm.sh/zustand@^5.0.3/middleware';
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 interface CartItem {
-  id: number; // For compatibility with components expecting .id
+  id: number; 
   product_id: number;
   name: string;
   sku: string | null;
