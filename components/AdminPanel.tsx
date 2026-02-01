@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
 export const AdminPanel: React.FC = () => {
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [password, setPassword] = useState('');
   const [syncLogs, setSyncLogs] = useState<any[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -13,11 +15,11 @@ export const AdminPanel: React.FC = () => {
   });
 
   useEffect(() => {
-    if (supabase) {
+    if (supabase && isAuthorized) {
       fetchLogs();
       fetchSettings();
     }
-  }, []);
+  }, [isAuthorized]);
 
   const fetchLogs = async () => {
     try {
@@ -37,6 +39,16 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === 'admin123') {
+      setIsAuthorized(true);
+    } else {
+      alert('❌ Clave incorrecta');
+      setPassword('');
+    }
+  };
+
   const handleManualSync = async () => {
     setIsSyncing(true);
     try {
@@ -46,16 +58,18 @@ export const AdminPanel: React.FC = () => {
           'Content-Type': 'application/json'
         }
       });
+      
       const result = await response.json();
       
-      if (result.success) {
+      if (response.ok && result.success) {
         alert(`✅ Éxito: ${result.processed} productos sincronizados.`);
         fetchLogs();
       } else {
-        alert(`❌ Error: ${result.error || 'Ocurrió un problema en el servidor'}`);
+        const errorMsg = result.error || 'Error desconocido en el servidor';
+        alert(`❌ Error de Sincronización: ${errorMsg}`);
       }
-    } catch (e) {
-      alert('❌ Error de conexión. Revisa los logs de Vercel.');
+    } catch (e: any) {
+      alert(`❌ Error de red: ${e.message || 'No se pudo contactar con la API'}`);
     } finally {
       setIsSyncing(false);
     }
@@ -79,7 +93,39 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
-  // ESTADO DE ERROR / CONFIGURACIÓN
+  // 1. ESTADO DE BLOQUEO POR CONTRASEÑA
+  if (!isAuthorized) {
+    return (
+      <div className="max-w-md mx-auto mt-20 animate-slide-up">
+        <div className="bg-white rounded-[3rem] p-12 shadow-2xl border border-slate-100 text-center">
+          <div className="w-20 h-20 bg-slate-900 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-xl shadow-slate-200">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <h2 className="text-3xl font-black italic tracking-tighter mb-2">Acceso <span className="text-[#e9118c]">Privado</span></h2>
+          <p className="text-slate-400 font-medium mb-10 text-sm">Ingresa la clave de administrador para gestionar la farmacia.</p>
+          
+          <form onSubmit={handleLogin} className="space-y-4">
+            <input 
+              type="password" 
+              autoFocus
+              className="w-full bg-slate-50 border-none rounded-2xl px-6 py-5 text-center font-black tracking-[0.5em] text-xl focus:ring-4 focus:ring-pink-50 transition-all outline-none"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button 
+              type="submit"
+              className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-black transition-all shadow-lg"
+            >
+              Desbloquear Panel
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. ESTADO DE ERROR DE CONFIGURACIÓN (SUPABASE)
   if (!supabase) {
     return (
       <div className="max-w-2xl mx-auto mt-10 animate-slide-up">
@@ -89,36 +135,15 @@ export const AdminPanel: React.FC = () => {
           </div>
           <h2 className="text-3xl font-black italic tracking-tighter mb-4">Configuración Requerida</h2>
           <p className="text-slate-500 font-medium mb-10 leading-relaxed">
-            Las variables de Supabase en Vercel deben tener el prefijo <code className="bg-slate-100 px-2 py-1 rounded text-[#e9118c] font-bold">VITE_</code> para que el catálogo pueda funcionar.
+            Las variables de Supabase en Vercel deben tener el prefijo <code className="bg-slate-100 px-2 py-1 rounded text-[#e9118c] font-bold">VITE_</code>.
           </p>
-          
-          <div className="space-y-4 text-left bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
-            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Pasos para activar:</h4>
-            <div className="flex gap-4 items-start">
-              <span className="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">1</span>
-              <p className="text-xs font-bold text-slate-600">En Vercel, renombra <code className="text-[#e9118c]">SUPABASE_URL</code> a <code className="text-[#e9118c]">VITE_SUPABASE_URL</code></p>
-            </div>
-            <div className="flex gap-4 items-start">
-              <span className="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">2</span>
-              <p className="text-xs font-bold text-slate-600">Renombra <code className="text-[#e9118c]">SUPABASE_ANON_KEY</code> a <code className="text-[#e9118c]">VITE_SUPABASE_ANON_KEY</code></p>
-            </div>
-            <div className="flex gap-4 items-start">
-              <span className="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">3</span>
-              <p className="text-xs font-bold text-slate-600">Haz un <strong>Redeploy</strong> en la pestaña "Deployments" de Vercel.</p>
-            </div>
-          </div>
-          
-          <button 
-            onClick={() => window.location.reload()}
-            className="mt-10 w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-black transition-all"
-          >
-            Ya lo hice, Reintentar conexión
-          </button>
+          <button onClick={() => window.location.reload()} className="mt-10 w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-[10px]">Reintentar conexión</button>
         </div>
       </div>
     );
   }
 
+  // 3. PANEL DE ADMINISTRACIÓN COMPLETO
   return (
     <div className="max-w-4xl mx-auto space-y-12 animate-slide-up pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
@@ -140,7 +165,9 @@ export const AdminPanel: React.FC = () => {
         <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm">
           <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-300 mb-8">Log de Conexión</h3>
           <div className="space-y-3">
-            {syncLogs.map(log => (
+            {syncLogs.length === 0 ? (
+              <div className="text-center py-10 text-slate-300 font-bold italic">No hay logs de sincronización</div>
+            ) : syncLogs.map(log => (
               <div key={log.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-3xl border border-slate-100/30">
                 <div>
                   <span className="font-black text-slate-800 text-sm block tracking-tight">{new Date(log.started_at).toLocaleTimeString()}</span>

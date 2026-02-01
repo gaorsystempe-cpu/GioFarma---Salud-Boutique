@@ -6,11 +6,9 @@ import OdooClient from '../lib/odoo-client';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization;
-  // Secreto preferido de Vercel, si no, usamos el disparador manual interno
-  const cronSecret = process.env.CRON_SECRET;
+  // Usamos VITE_ por consistencia con la elección del usuario
+  const cronSecret = process.env.VITE_CRON_SECRET || process.env.CRON_SECRET;
 
-  // Si hay un secreto configurado en Vercel, lo validamos.
-  // Si viene del Admin UI (manual-trigger), permitimos el paso para facilitar la configuración inicial.
   if (cronSecret && authHeader !== `Bearer ${cronSecret}` && authHeader !== `Bearer manual-trigger`) {
     return res.status(401).json({ success: false, error: 'No autorizado' });
   }
@@ -18,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const startTime = new Date();
   
   if (!supabase) {
-    return res.status(500).json({ success: false, error: 'Supabase no conectado' });
+    return res.status(500).json({ success: false, error: 'Supabase no conectado.' });
   }
 
   const { data: logEntry } = await supabase
@@ -33,6 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const odoo = new OdooClient();
+    const odooUrl = process.env.VITE_ODOO_URL || process.env.ODOO_URL;
     
     // 1. Sincronizar Categorías
     const categories = await odoo.execute('product.category', 'search_read', [[]], {
@@ -78,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           category_name: prod.categ_id ? prod.categ_id[1] : null,
           uom_name: prod.uom_id ? prod.uom_id[1] : null,
           active: true,
-          image_url: `${process.env.ODOO_URL}/web/image/product.product/${prod.id}/image_512`,
+          image_url: `${odooUrl}/web/image/product.product/${prod.id}/image_512`,
           write_date: prod.write_date
         }, { onConflict: 'odoo_id' });
         processedCount++;

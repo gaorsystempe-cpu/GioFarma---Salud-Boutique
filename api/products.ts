@@ -7,9 +7,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ success: false, error: 'Método no permitido' });
   }
 
-  // Si supabase no está inicializado, devolvemos error amigable
   if (!supabase) {
-    return res.status(500).json({ success: false, error: 'Base de datos no configurada.' });
+    return res.status(500).json({ success: false, error: 'Supabase no configurado correctamente.' });
   }
 
   const page = parseInt(req.query.page as string || '1');
@@ -23,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select('*', { count: 'exact' })
       .eq('active', true);
 
-    if (categoryId && categoryId !== 'null') {
+    if (categoryId && categoryId !== 'null' && categoryId !== 'undefined') {
       query = query.eq('category_id', categoryId);
     }
 
@@ -55,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('API Products Error:', error);
     return res.status(500).json({
       success: false,
-      error: 'Error al conectar con el servidor de datos.'
+      error: 'Error al obtener productos de la base de datos.'
     });
   }
 }
