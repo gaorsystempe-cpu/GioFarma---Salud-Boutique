@@ -1,8 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// En el frontend (browser), process no existe. 
-// Vite o Vercel suelen inyectar variables, pero necesitamos seguridad.
 const getEnv = (key: string) => {
   try {
     // @ts-ignore
@@ -18,8 +16,11 @@ const getEnv = (key: string) => {
 const supabaseUrl = getEnv('NEXT_PUBLIC_SUPABASE_URL');
 const supabaseAnonKey = getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY') || getEnv('SUPABASE_SERVICE_ROLE_KEY');
 
-if (!supabaseUrl) {
-  console.warn('Configuración de Supabase incompleta. Verifica las variables de entorno.');
-}
+// Solo inicializamos si tenemos la URL, para evitar el Uncaught Error
+export const supabase = supabaseUrl 
+  ? createClient(supabaseUrl, supabaseAnonKey) 
+  : null;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+if (!supabase) {
+  console.error('CRITICAL: Supabase keys are missing. App will run in limited mode.');
+}

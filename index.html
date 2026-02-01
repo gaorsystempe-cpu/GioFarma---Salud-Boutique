@@ -4,58 +4,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GioFarma | Salud Boutique & Bienestar Digital</title>
-    <meta name="description" content="Catálogo de farmacia premium conectado a Odoo ERP. Encuentra medicamentos y productos de cuidado personal con stock real.">
-    
+    <title>GioFarma | Salud & Bienestar Digital</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    
     <style>
-        body {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            background-color: #f8fafc;
-            color: #0f172a;
-            -webkit-font-smoothing: antialiased;
-            overflow-x: hidden;
-        }
-        .header-glow {
-            box-shadow: 0 4px 30px -10px rgba(0,0,0,0.03);
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-        }
-        
-        .product-card-hover {
-            transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-        }
-        .product-card-hover:hover {
-            transform: translateY(-12px);
-            box-shadow: 0 40px 80px -20px rgba(233, 17, 140, 0.08);
-        }
-        
-        .search-focus:focus-within {
-            background-color: white !important;
-            box-shadow: 0 10px 40px -10px rgba(0,0,0,0.05);
-            border-color: rgba(233, 17, 140, 0.2);
-        }
-
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        
-        .animate-in { animation: fadeIn 0.8s ease-out; }
-        
+        :root { --primary: #e9118c; --slate-900: #0f172a; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; color: #0f172a; overflow-x: hidden; }
+        .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.3); }
+        .bg-medical-gradient { background: radial-gradient(circle at top right, #fff5f9 0%, #f8fafc 100%); }
+        .product-card { transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+        .product-card:hover { transform: translateY(-12px); box-shadow: 0 30px 60px -15px rgba(233, 17, 140, 0.08); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-        .btn-premium {
-            background-size: 200% auto;
-            transition: 0.5s;
-        }
-        .btn-premium:hover {
-            background-position: right center;
-        }
+        .btn-premium { position: relative; overflow: hidden; transition: all 0.3s ease; }
+        .btn-premium:after { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); transition: 0.5s; }
+        .btn-premium:hover:after { left: 100%; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-slide-up { animation: slideUp 0.6s ease-out forwards; }
     </style>
-<script type="importmap">
+    <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@^19.2.4",
@@ -64,16 +30,16 @@
     "zustand": "https://esm.sh/zustand@^5.0.3",
     "zustand/middleware": "https://esm.sh/zustand@^5.0.3/middleware",
     "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.48.1",
-    "next/": "https://esm.sh/next@^16.1.6/",
-    "@vercel/node": "https://esm.sh/@vercel/node@^5.5.28",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
     "react/": "https://esm.sh/react@^19.2.4/",
-    "zustand/": "https://esm.sh/zustand@^5.0.11/"
+    "next/": "https://esm.sh/next@^16.1.6/",
+    "zustand/": "https://esm.sh/zustand@^5.0.11/",
+    "@vercel/node": "https://esm.sh/@vercel/node@^5.5.28"
   }
 }
 </script>
 </head>
-<body class="selection:bg-[#e9118c] selection:text-white">
+<body class="bg-medical-gradient">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
 </body>
