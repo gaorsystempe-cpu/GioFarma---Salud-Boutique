@@ -1,12 +1,7 @@
 
 {
   "version": 2,
-  "crons": [
-    {
-      "path": "/api/sync",
-      "schedule": "0 0 * * *"
-    }
-  ],
+  "framework": "vite",
   "rewrites": [
     {
       "source": "/api/(.*)",

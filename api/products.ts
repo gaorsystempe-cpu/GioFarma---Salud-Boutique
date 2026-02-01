@@ -35,7 +35,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (error) throw error;
 
-    res.setHeader('Content-Type', 'application/json');
     return res.status(200).json({
       success: true,
       data: data || [],
