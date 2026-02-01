@@ -1,21 +1,26 @@
 
-const xmlrpc = require('xmlrpc');
+import xmlrpc from 'xmlrpc';
 
-class OdooClient {
+export default class OdooClient {
+  private url: string;
+  private db: string;
+  private username: string;
+  private password: string;
+  private uid: number | null = null;
+
   constructor() {
     const rawUrl = process.env.VITE_ODOO_URL || process.env.ODOO_URL || '';
     this.url = rawUrl.replace(/\/$/, '');
-    this.db = process.env.VITE_ODOO_DB || process.env.ODOO_DB;
-    this.username = process.env.VITE_ODOO_USERNAME || process.env.ODOO_USERNAME;
-    this.password = process.env.VITE_ODOO_API_KEY || process.env.ODOO_API_KEY;
-    this.uid = null;
+    this.db = process.env.VITE_ODOO_DB || process.env.ODOO_DB || '';
+    this.username = process.env.VITE_ODOO_USERNAME || process.env.ODOO_USERNAME || '';
+    this.password = process.env.VITE_ODOO_API_KEY || process.env.ODOO_API_KEY || '';
   }
 
-  async connect() {
-    if (this.uid) return this.uid;
+  async connect(): Promise<number> {
+    if (this.uid !== null) return this.uid;
     
     if (!this.url || !this.db || !this.password || !this.username) {
-      throw new Error('Configuración de Odoo incompleta. Verifica URL, DB, Usuario y API Key en las variables de entorno.');
+      throw new Error('Configuración de Odoo incompleta. Verifica URL, DB, Usuario y API Key.');
     }
 
     const clientUrl = `${this.url}/xmlrpc/2/common`;
@@ -24,16 +29,16 @@ class OdooClient {
       : xmlrpc.createClient(clientUrl);
 
     return new Promise((resolve, reject) => {
-      common.methodCall('authenticate', [this.db, this.username, this.password, {}], (error, value) => {
+      common.methodCall('authenticate', [this.db, this.username, this.password, {}], (error: any, value: any) => {
         if (error) return reject(new Error(`Odoo Auth Error: ${error.message}`));
-        if (!value) return reject(new Error('Autenticación fallida en Odoo. Revisa credenciales.'));
+        if (!value) return reject(new Error('Autenticación fallida en Odoo.'));
         this.uid = value;
         resolve(value);
       });
     });
   }
 
-  async execute(model, method, args, kwargs = {}) {
+  async execute(model: string, method: string, args: any[], kwargs: any = {}): Promise<any> {
     const uid = await this.connect();
     const clientUrl = `${this.url}/xmlrpc/2/object`;
     const models = this.url.startsWith('https') 
@@ -41,14 +46,14 @@ class OdooClient {
       : xmlrpc.createClient(clientUrl);
 
     return new Promise((resolve, reject) => {
-      models.methodCall('execute_kw', [this.db, uid, this.password, model, method, args, kwargs], (error, value) => {
+      models.methodCall('execute_kw', [this.db, uid, this.password, model, method, args, kwargs], (error: any, value: any) => {
         if (error) return reject(new Error(`Odoo Execute Error (${model}.${method}): ${error.message}`));
         resolve(value);
       });
     });
   }
 
-  async createSaleOrder(orderData) {
+  async createSaleOrder(orderData: any) {
     try {
       let partnerId;
       const partners = await this.execute('res.partner', 'search', [[['email', '=', orderData.partner_email]]]);
@@ -65,7 +70,7 @@ class OdooClient {
         }]);
       }
 
-      const orderLines = orderData.order_lines.map(line => [0, 0, {
+      const orderLines = orderData.order_lines.map((line: any) => [0, 0, {
         product_id: line.product_id,
         product_uom_qty: line.quantity,
         price_unit: line.price_unit,
@@ -93,5 +98,3 @@ class OdooClient {
     }
   }
 }
-
-module.exports = OdooClient;

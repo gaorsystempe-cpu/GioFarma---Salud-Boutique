@@ -1,14 +1,10 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabase } from '../lib/supabase';
-
-// @ts-ignore
 import OdooClient from '../lib/odoo-client';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   const authHeader = req.headers.authorization;
   const cronSecret = process.env.VITE_CRON_SECRET || process.env.CRON_SECRET;
@@ -17,13 +13,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ success: false, error: 'No autorizado' });
   }
 
-  const startTime = new Date();
-  
   if (!supabase) {
-    return res.status(500).json({ success: false, error: 'Supabase no conectado. Verifica las variables de entorno.' });
+    return res.status(500).json({ success: false, error: 'Supabase no conectado.' });
   }
 
+  const startTime = new Date();
   let logEntry: any = null;
+
   try {
     const { data } = await supabase
       .from('sync_log')
@@ -35,16 +31,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select()
       .single();
     logEntry = data;
-  } catch (logErr) {
-    console.warn('Sync log creation failed:', logErr);
-  }
 
-  try {
     const odoo = new OdooClient();
     const odooUrl = (process.env.VITE_ODOO_URL || process.env.ODOO_URL || '').replace(/\/$/, '');
-    
-    if (!odooUrl) throw new Error('VITE_ODOO_URL no configurada');
 
+    // Sincronizar Categorías
     const categories = await odoo.execute('product.category', 'search_read', [[]], {
       fields: ['id', 'name', 'parent_id']
     });
@@ -60,6 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }, { onConflict: 'odoo_id' });
     }
 
+    // Sincronizar Productos
     const products = await odoo.execute('product.product', 'search_read', [
       [['sale_ok', '=', true], ['active', '=', true]]
     ], {
@@ -91,8 +83,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           write_date: prod.write_date
         }, { onConflict: 'odoo_id' });
         processedCount++;
-      } catch (prodErr) {
-        console.error(`Error processing product ${prod.id}:`, prodErr);
+      } catch (err) {
+        console.error(`Error sync prod ${prod.id}:`, err);
       }
     }
 
@@ -108,14 +100,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }).eq('id', logEntry.id);
     }
 
-    return res.status(200).json({
-      success: true,
-      processed: processedCount,
-      duration: `${duration}s`
-    });
+    return res.status(200).json({ success: true, processed: processedCount, duration: `${duration}s` });
 
   } catch (error: any) {
-    console.error('CRITICAL Sync error:', error);
+    console.error('Sync Error:', error);
     if (logEntry) {
       await supabase.from('sync_log').update({
         status: 'error',
@@ -123,9 +111,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         completed_at: new Date().toISOString()
       }).eq('id', logEntry.id);
     }
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message || 'Error en el proceso de sincronización' 
-    });
+    return res.status(500).json({ success: false, error: error.message });
   }
 }

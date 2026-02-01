@@ -1,6 +1,7 @@
-
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabase } from '../lib/supabase';
+
+// Use import instead of require for OdooClient
 // @ts-ignore
 import OdooClient from '../lib/odoo-client';
 
@@ -8,6 +9,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     try {
       const { customer_name, customer_email, customer_phone, customer_address, items, notes } = req.body;
+
+      if (!items || items.length === 0) {
+        return res.status(400).json({ success: false, error: 'El carrito está vacío' });
+      }
 
       const odoo = new OdooClient();
 
@@ -75,10 +80,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
     } catch (error: any) {
-      console.error('Order Error:', error);
+      console.error('Error al crear orden:', error);
       return res.status(500).json({ 
         success: false, 
-        error: 'No se pudo generar el pedido en el sistema.' 
+        error: error.message || 'No se pudo generar el pedido en Odoo.' 
       });
     }
   } else if (req.method === 'GET') {
