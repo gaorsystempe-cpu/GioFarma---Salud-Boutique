@@ -4,12 +4,17 @@ import { supabase } from '../lib/supabase';
 import OdooClient from '../lib/odoo-client';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Configurar cabeceras CORS de inmediato
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const authHeader = req.headers.authorization;
   const cronSecret = process.env.VITE_CRON_SECRET || process.env.CRON_SECRET;
 
-  // Validación de seguridad
+  // Validación de seguridad (Permitir 'manual-trigger' para el panel admin)
   if (cronSecret && authHeader !== `Bearer ${cronSecret}` && authHeader !== `Bearer manual-trigger`) {
     return res.status(401).json({ success: false, error: 'No autorizado' });
   }
@@ -22,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let logId: string | null = null;
 
   try {
-    // 1. Crear log inicial
+    // 1. Crear log inicial en Supabase
     const { data: logData, error: logError } = await supabase
       .from('sync_log')
       .insert({
@@ -33,11 +38,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select()
       .single();
     
-    if (logError) console.error('Error creando log:', logError);
+    if (logError) console.error('Error creando log:', logError.message);
     logId = logData?.id;
 
     const odoo = new OdooClient();
-    const odooUrl = (process.env.VITE_ODOO_URL || process.env.ODOO_URL || '').replace(/\/$/, '');
+    const rawOdooUrl = process.env.VITE_ODOO_URL || process.env.ODOO_URL || '';
+    const odooUrl = rawOdooUrl.replace(/\/$/, '');
 
     // 2. Sincronizar Categorías (Batch)
     const categories = await odoo.execute('product.category', 'search_read', [[]], {
@@ -46,7 +52,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (categories && categories.length > 0) {
       const categoriesData = categories.map((cat: any) => ({
-        id: cat.id,
         odoo_id: cat.id,
         name: cat.name,
         parent_id: cat.parent_id ? cat.parent_id[0] : null,
@@ -57,8 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await supabase.from('categories').upsert(categoriesData, { onConflict: 'odoo_id' });
     }
 
-    // 3. Sincronizar Productos (Batch)
-    // Limitamos a 200 para asegurar que no exceda el tiempo de ejecución en Vercel
+    // 3. Sincronizar Productos (Batch) - Limitado para evitar Timeouts
     const products = await odoo.execute('product.product', 'search_read', [
       [['sale_ok', '=', true], ['active', '=', true]]
     ], {
@@ -67,16 +71,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'qty_available', 'virtual_available', 'description_sale', 
         'categ_id', 'uom_id', 'write_date'
       ],
-      limit: 250, 
+      limit: 150, // Bajamos el límite para asegurar que termine antes de 10s
       order: 'write_date desc'
     });
 
     if (!products || products.length === 0) {
-      throw new Error('No se encontraron productos en Odoo');
+      throw new Error('No se encontraron productos activos en Odoo');
     }
 
     const productsData = products.map((prod: any) => ({
-      id: prod.id, 
       odoo_id: prod.id,
       name: prod.name,
       sku: prod.default_code || null,
@@ -92,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       write_date: prod.write_date
     }));
 
-    // UPSERT MASIVO: Una sola llamada a la base de datos es 100x más rápida
+    // UPSERT MASIVO: Una sola llamada a la base de datos
     const { error: upsertError } = await supabase.from('products').upsert(productsData, { onConflict: 'odoo_id' });
     
     if (upsertError) throw upsertError;
@@ -117,14 +120,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
   } catch (error: any) {
-    console.error('Sync Error:', error.message);
+    console.error('Sync Error Details:', error.message);
     
     if (logId) {
-      await supabase.from('sync_log').update({
-        status: 'error',
-        error_message: error.message,
-        completed_at: new Date().toISOString()
-      }).eq('id', logId);
+      try {
+        await supabase.from('sync_log').update({
+          status: 'error',
+          error_message: error.message,
+          completed_at: new Date().toISOString()
+        }).eq('id', logId);
+      } catch (logUpdateError) {
+        console.error('Error al actualizar log de error:', logUpdateError);
+      }
     }
 
     return res.status(500).json({ 
