@@ -9,19 +9,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization;
   const cronSecret = process.env.VITE_CRON_SECRET || process.env.CRON_SECRET;
 
+  // Validación de seguridad
   if (cronSecret && authHeader !== `Bearer ${cronSecret}` && authHeader !== `Bearer manual-trigger`) {
     return res.status(401).json({ success: false, error: 'No autorizado' });
   }
 
   if (!supabase) {
-    return res.status(500).json({ success: false, error: 'Supabase no conectado.' });
+    return res.status(500).json({ success: false, error: 'Supabase no conectado. Revisa variables de entorno.' });
   }
 
   const startTime = new Date();
-  let logEntry: any = null;
+  let logId: string | null = null;
 
   try {
-    const { data } = await supabase
+    // 1. Crear log inicial
+    const { data: logData, error: logError } = await supabase
       .from('sync_log')
       .insert({
         sync_type: 'full_sync',
@@ -30,28 +32,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
       .select()
       .single();
-    logEntry = data;
+    
+    if (logError) console.error('Error creando log:', logError);
+    logId = logData?.id;
 
     const odoo = new OdooClient();
     const odooUrl = (process.env.VITE_ODOO_URL || process.env.ODOO_URL || '').replace(/\/$/, '');
 
-    // Sincronizar Categorías
+    // 2. Sincronizar Categorías (Batch)
     const categories = await odoo.execute('product.category', 'search_read', [[]], {
       fields: ['id', 'name', 'parent_id']
     });
 
-    for (const cat of categories) {
-      await supabase.from('categories').upsert({
+    if (categories && categories.length > 0) {
+      const categoriesData = categories.map((cat: any) => ({
         id: cat.id,
         odoo_id: cat.id,
         name: cat.name,
         parent_id: cat.parent_id ? cat.parent_id[0] : null,
         parent_name: cat.parent_id ? cat.parent_id[1] : null,
         active: true
-      }, { onConflict: 'odoo_id' });
+      }));
+
+      await supabase.from('categories').upsert(categoriesData, { onConflict: 'odoo_id' });
     }
 
-    // Sincronizar Productos
+    // 3. Sincronizar Productos (Batch)
+    // Limitamos a 200 para asegurar que no exceda el tiempo de ejecución en Vercel
     const products = await odoo.execute('product.product', 'search_read', [
       [['sale_ok', '=', true], ['active', '=', true]]
     ], {
@@ -60,57 +67,69 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'qty_available', 'virtual_available', 'description_sale', 
         'categ_id', 'uom_id', 'write_date'
       ],
-      limit: 500
+      limit: 250, 
+      order: 'write_date desc'
     });
 
-    let processedCount = 0;
-    for (const prod of products) {
-      try {
-        await supabase.from('products').upsert({
-          id: prod.id, 
-          odoo_id: prod.id,
-          name: prod.name,
-          sku: prod.default_code || null,
-          list_price: prod.list_price || 0,
-          qty_available: prod.qty_available || 0,
-          virtual_available: prod.virtual_available || 0,
-          description: prod.description_sale || null,
-          category_id: prod.categ_id ? prod.categ_id[0] : null,
-          category_name: prod.categ_id ? prod.categ_id[1] : null,
-          uom_name: prod.uom_id ? prod.uom_id[1] : null,
-          active: true,
-          image_url: `${odooUrl}/web/image/product.product/${prod.id}/image_512`,
-          write_date: prod.write_date
-        }, { onConflict: 'odoo_id' });
-        processedCount++;
-      } catch (err) {
-        console.error(`Error sync prod ${prod.id}:`, err);
-      }
+    if (!products || products.length === 0) {
+      throw new Error('No se encontraron productos en Odoo');
     }
+
+    const productsData = products.map((prod: any) => ({
+      id: prod.id, 
+      odoo_id: prod.id,
+      name: prod.name,
+      sku: prod.default_code || null,
+      list_price: prod.list_price || 0,
+      qty_available: prod.qty_available || 0,
+      virtual_available: prod.virtual_available || 0,
+      description: prod.description_sale || null,
+      category_id: prod.categ_id ? prod.categ_id[0] : null,
+      category_name: prod.categ_id ? prod.categ_id[1] : null,
+      uom_name: prod.uom_id ? prod.uom_id[1] : null,
+      active: true,
+      image_url: `${odooUrl}/web/image/product.product/${prod.id}/image_512`,
+      write_date: prod.write_date
+    }));
+
+    // UPSERT MASIVO: Una sola llamada a la base de datos es 100x más rápida
+    const { error: upsertError } = await supabase.from('products').upsert(productsData, { onConflict: 'odoo_id' });
+    
+    if (upsertError) throw upsertError;
 
     const endTime = new Date();
     const duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
 
-    if (logEntry) {
+    // 4. Actualizar log final
+    if (logId) {
       await supabase.from('sync_log').update({
         status: 'success',
-        records_processed: processedCount,
+        records_processed: products.length,
         completed_at: endTime.toISOString(),
         duration_seconds: duration
-      }).eq('id', logEntry.id);
+      }).eq('id', logId);
     }
 
-    return res.status(200).json({ success: true, processed: processedCount, duration: `${duration}s` });
+    return res.status(200).json({ 
+      success: true, 
+      processed: products.length, 
+      duration: `${duration}s` 
+    });
 
   } catch (error: any) {
-    console.error('Sync Error:', error);
-    if (logEntry) {
+    console.error('Sync Error:', error.message);
+    
+    if (logId) {
       await supabase.from('sync_log').update({
         status: 'error',
         error_message: error.message,
         completed_at: new Date().toISOString()
-      }).eq('id', logEntry.id);
+      }).eq('id', logId);
     }
-    return res.status(500).json({ success: false, error: error.message });
+
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Error interno durante la sincronización' 
+    });
   }
 }

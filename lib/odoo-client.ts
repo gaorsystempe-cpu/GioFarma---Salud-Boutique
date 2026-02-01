@@ -10,6 +10,7 @@ export default class OdooClient {
   private uid: number | null = null;
 
   constructor() {
+    // Intentar obtener variables de proceso (Vercel) o de import (Vite)
     const rawUrl = process.env.VITE_ODOO_URL || process.env.ODOO_URL || '';
     this.url = rawUrl.replace(/\/$/, '');
     this.db = process.env.VITE_ODOO_DB || process.env.ODOO_DB || '';
@@ -21,7 +22,7 @@ export default class OdooClient {
     if (this.uid !== null) return this.uid;
     
     if (!this.url || !this.db || !this.password || !this.username) {
-      throw new Error('Configuración de Odoo incompleta. Verifica URL, DB, Usuario y API Key.');
+      throw new Error(`Configuración de Odoo incompleta en el servidor. Faltan: ${!this.url ? 'URL ' : ''}${!this.db ? 'DB ' : ''}${!this.username ? 'USER ' : ''}${!this.password ? 'KEY' : ''}`);
     }
 
     const clientUrl = `${this.url}/xmlrpc/2/common`;
@@ -30,9 +31,13 @@ export default class OdooClient {
       : xmlrpc.createClient(clientUrl);
 
     return new Promise((resolve, reject) => {
+      // Establecer un timeout manual para la conexión
+      const timeout = setTimeout(() => reject(new Error('Timeout conectando con Odoo (15s)')), 15000);
+
       common.methodCall('authenticate', [this.db, this.username, this.password, {}], (error: any, value: any) => {
+        clearTimeout(timeout);
         if (error) return reject(new Error(`Odoo Auth Error: ${error.message}`));
-        if (!value) return reject(new Error('Autenticación fallida en Odoo.'));
+        if (value === false || value === undefined) return reject(new Error('Autenticación fallida en Odoo. Revisa URL/DB/Usuario/Key.'));
         this.uid = value;
         resolve(value);
       });
