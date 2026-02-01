@@ -59,14 +59,19 @@ export const AdminPanel: React.FC = () => {
         }
       });
       
-      const result = await response.json();
-      
-      if (response.ok && result.success) {
-        alert(`✅ Éxito: ${result.processed} productos sincronizados.`);
-        fetchLogs();
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const result = await response.json();
+        if (response.ok && result.success) {
+          alert(`✅ Éxito: ${result.processed} productos sincronizados.`);
+          fetchLogs();
+        } else {
+          alert(`❌ Error: ${result.error || 'Error desconocido'}`);
+        }
       } else {
-        const errorMsg = result.error || 'Error desconocido en el servidor';
-        alert(`❌ Error de Sincronización: ${errorMsg}`);
+        const errorText = await response.text();
+        console.error('Server error response:', errorText);
+        alert(`❌ Error del servidor (500): El servidor no devolvió JSON. Revisa los logs de Vercel. Detalles: ${errorText.substring(0, 100)}...`);
       }
     } catch (e: any) {
       alert(`❌ Error de red: ${e.message || 'No se pudo contactar con la API'}`);
@@ -93,7 +98,6 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
-  // 1. ESTADO DE BLOQUEO POR CONTRASEÑA
   if (!isAuthorized) {
     return (
       <div className="max-w-md mx-auto mt-20 animate-slide-up">
@@ -125,7 +129,6 @@ export const AdminPanel: React.FC = () => {
     );
   }
 
-  // 2. ESTADO DE ERROR DE CONFIGURACIÓN (SUPABASE)
   if (!supabase) {
     return (
       <div className="max-w-2xl mx-auto mt-10 animate-slide-up">
@@ -143,7 +146,6 @@ export const AdminPanel: React.FC = () => {
     );
   }
 
-  // 3. PANEL DE ADMINISTRACIÓN COMPLETO
   return (
     <div className="max-w-4xl mx-auto space-y-12 animate-slide-up pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">

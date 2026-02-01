@@ -1,12 +1,18 @@
-
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabase } from '../lib/supabase';
+
+// Fix: Use import with @ts-ignore instead of require to avoid TypeScript "Cannot find name 'require'" error
+// This matches the implementation in other API routes like api/sync/route.ts
 // @ts-ignore
 import OdooClient from '../lib/odoo-client';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Manejar preflight de CORS si fuera necesario (aunque Vercel lo hace por defecto para /api)
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   const authHeader = req.headers.authorization;
-  // Usamos VITE_ por consistencia con la elección del usuario
   const cronSecret = process.env.VITE_CRON_SECRET || process.env.CRON_SECRET;
 
   if (cronSecret && authHeader !== `Bearer ${cronSecret}` && authHeader !== `Bearer manual-trigger`) {
@@ -16,24 +22,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const startTime = new Date();
   
   if (!supabase) {
-    return res.status(500).json({ success: false, error: 'Supabase no conectado.' });
+    return res.status(500).json({ success: false, error: 'Supabase no conectado. Verifica las variables VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en Vercel.' });
   }
 
-  const { data: logEntry } = await supabase
-    .from('sync_log')
-    .insert({
-      sync_type: 'full_sync',
-      status: 'processing',
-      started_at: startTime.toISOString()
-    })
-    .select()
-    .single();
+  let logEntry: any = null;
+  try {
+    const { data } = await supabase
+      .from('sync_log')
+      .insert({
+        sync_type: 'full_sync',
+        status: 'processing',
+        started_at: startTime.toISOString()
+      })
+      .select()
+      .single();
+    logEntry = data;
+  } catch (logErr) {
+    console.warn('No se pudo crear el log inicial en Supabase:', logErr);
+  }
 
   try {
     const odoo = new OdooClient();
-    const odooUrl = process.env.VITE_ODOO_URL || process.env.ODOO_URL;
+    const odooUrl = (process.env.VITE_ODOO_URL || process.env.ODOO_URL || '').replace(/\/$/, '');
     
+    if (!odooUrl) throw new Error('VITE_ODOO_URL no configurada');
+
     // 1. Sincronizar Categorías
+    console.log('Syncing categories...');
     const categories = await odoo.execute('product.category', 'search_read', [[]], {
       fields: ['id', 'name', 'parent_id']
     });
@@ -50,6 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 2. Sincronizar Productos
+    console.log('Syncing products...');
     const products = await odoo.execute('product.product', 'search_read', [
       [['sale_ok', '=', true], ['active', '=', true]]
     ], {
@@ -105,7 +121,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
   } catch (error: any) {
-    console.error('Sync error:', error);
+    console.error('CRITICAL Sync error:', error);
     if (logEntry) {
       await supabase.from('sync_log').update({
         status: 'error',
@@ -113,6 +129,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         completed_at: new Date().toISOString()
       }).eq('id', logEntry.id);
     }
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Error interno del servidor en el proceso de sincronización' 
+    });
   }
 }
