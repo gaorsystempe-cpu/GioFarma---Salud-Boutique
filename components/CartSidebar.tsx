@@ -28,7 +28,7 @@ export const CartSidebar: React.FC<CartSidebarProps> = ({
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-2xl transition-opacity duration-500" onClick={onClose} />
       
       <div className="absolute right-0 top-0 bottom-0 w-full max-w-lg bg-white shadow-2xl flex flex-col transform transition-transform duration-700 cubic-bezier(0.4, 0, 0.2, 1)">
-        <div className="p-10 lg:p-12 border-b border-slate-50 flex items-center justify-between">
+        <div className="p-10 lg:p-12 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h2 className="text-3xl font-black tracking-tighter uppercase italic text-slate-900">Bolsa <span className="text-[#e9118c]">Gio</span></h2>
           </div>
@@ -71,7 +71,7 @@ export const CartSidebar: React.FC<CartSidebarProps> = ({
                       <span className="px-5 text-xs font-black text-slate-900">{item.quantity}</span>
                       <button onClick={() => onUpdateQuantity(item.id, item.quantity + 1)} className="w-8 h-8 flex items-center justify-center hover:bg-white rounded-xl transition-all text-xs font-black shadow-sm">+</button>
                     </div>
-                    <span className="text-xl font-black text-slate-900 tracking-tighter italic">S/ {(item.list_price * item.quantity).toFixed(2)}</span>
+                    <span className="text-xl font-black text-slate-900 tracking-tighter italic">S/ {(item.price * item.quantity).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -79,7 +79,7 @@ export const CartSidebar: React.FC<CartSidebarProps> = ({
           )}
         </div>
 
-        <div className="p-12 border-t border-slate-50 space-y-10">
+        <div className="p-12 border-t border-slate-100 space-y-10">
           <div className="flex justify-between items-center">
              <span className="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">Total Inversión</span>
              <span className="text-4xl font-black text-slate-900 tracking-tighter italic">S/ {total.toFixed(2)}</span>

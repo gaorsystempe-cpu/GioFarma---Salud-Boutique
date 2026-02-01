@@ -25,25 +25,35 @@ export const useCart = () => {
 
   const addToCart = useCallback((product: Product) => {
     setItems((prev) => {
-      const existing = prev.find((i) => i.id === product.id);
+      const existing = prev.find((i) => i.product_id === product.odoo_id);
       if (existing) {
         return prev.map((i) =>
-          i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
+          i.product_id === product.odoo_id ? { ...i, quantity: i.quantity + 1 } : i
         );
       }
-      return [...prev, { ...product, quantity: 1 }];
+      const newItem: CartItem = {
+        id: product.id,
+        product_id: product.odoo_id,
+        name: product.name,
+        sku: product.sku,
+        price: product.list_price,
+        quantity: 1,
+        image_url: product.image_url,
+        max_stock: product.qty_available
+      };
+      return [...prev, newItem];
     });
     setIsOpen(true);
   }, []);
 
   const removeFromCart = useCallback((productId: number) => {
-    setItems((prev) => prev.filter((i) => i.id !== productId));
+    setItems((prev) => prev.filter((i) => i.product_id !== productId));
   }, []);
 
   const updateQuantity = useCallback((productId: number, quantity: number) => {
     if (quantity < 1) return;
     setItems((prev) =>
-      prev.map((i) => (i.id === productId ? { ...i, quantity } : i))
+      prev.map((i) => (i.product_id === productId ? { ...i, quantity } : i))
     );
   }, []);
 
@@ -51,8 +61,7 @@ export const useCart = () => {
     setItems([]);
   }, []);
 
-  // Corregido: Usar list_price en lugar de price
-  const total = items.reduce((sum, item) => sum + item.list_price * item.quantity, 0);
+  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   return {

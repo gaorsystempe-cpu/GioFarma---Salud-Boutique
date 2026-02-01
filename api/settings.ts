@@ -5,6 +5,10 @@ import { supabase } from '../lib/supabase';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ success: false });
 
+  if (!supabase) {
+    return res.status(500).json({ success: false, error: 'Database client not initialized' });
+  }
+
   try {
     const { data, error } = await supabase
       .from('store_settings')

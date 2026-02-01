@@ -1,4 +1,5 @@
 
+// @ts-ignore
 import xmlrpc from 'xmlrpc';
 
 export default class OdooClient {
