@@ -25,8 +25,15 @@ export interface Category {
   parent_name?: string;
 }
 
-export interface CartItem extends Product {
+export interface CartItem {
+  id: number;
+  product_id: number;
+  name: string;
+  sku: string | null;
+  price: number;
   quantity: number;
+  image_url: string | null;
+  max_stock: number;
 }
 
 export interface Customer {
@@ -58,10 +65,10 @@ export interface OrderDetails {
   customer_phone: string;
   customer_address: string;
   items: { 
-    id: number; // product_id (bigint en supabase)
+    product_id: number; 
     name: string;
     sku: string | null;
-    list_price: number;
+    price: number;
     quantity: number;
   }[];
   notes?: string;
