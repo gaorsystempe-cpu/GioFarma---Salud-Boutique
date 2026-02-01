@@ -3,21 +3,31 @@ import { Product, Category, OrderDetails, Order, PaginationInfo } from '../types
 
 export class OdooService {
   private static async safeFetch(url: string, options?: RequestInit) {
-    // Usamos rutas relativas para mayor compatibilidad con proxies de Vercel/Vite
-    const response = await fetch(url, options);
-    
-    if (!response.ok) {
-      throw new Error(`Servidor respondió con error ${response.status}`);
-    }
+    try {
+      const response = await fetch(url, options);
+      const contentType = response.headers.get('content-type');
+      
+      if (!response.ok) {
+        if (contentType && contentType.includes('application/json')) {
+          const err = await response.json();
+          throw new Error(err.error || `Error ${response.status}`);
+        }
+        const text = await response.text();
+        const snippet = text.substring(0, 100).replace(/<[^>]*>?/gm, '').trim();
+        throw new Error(snippet || `Error del servidor ${response.status}`);
+      }
 
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      const text = await response.text();
-      console.error('Respuesta no-JSON recibida:', text.substring(0, 100));
-      throw new Error('El servidor devolvió un formato no válido. Verifica que las funciones API estén desplegadas.');
-    }
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response received:', text.substring(0, 100));
+        throw new Error('El servidor devolvió una respuesta no válida (HTML). Esto suele ocurrir por un error 404 o un fallo en el despliegue de la API.');
+      }
 
-    return await response.json();
+      return await response.json();
+    } catch (e: any) {
+      console.error('Fetch error:', e.message);
+      throw e;
+    }
   }
 
   static async getProducts(params: { page?: number, limit?: number, category?: number | null, search?: string }): Promise<{ data: Product[], pagination: PaginationInfo }> {
@@ -28,12 +38,8 @@ export class OdooService {
     if (params.search) searchParams.append('search', params.search);
 
     const result = await this.safeFetch(`/api/products?${searchParams.toString()}`);
-    
     if (!result.success) throw new Error(result.error);
-    return {
-      data: result.data || [],
-      pagination: result.pagination
-    };
+    return { data: result.data || [], pagination: result.pagination };
   }
 
   static async getCategories(): Promise<Category[]> {
@@ -53,7 +59,7 @@ export class OdooService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(orderData)
     });
-    if (!result.success && !result.warning) throw new Error(result.error);
+    if (!result.success) throw new Error(result.error);
     return result;
   }
 

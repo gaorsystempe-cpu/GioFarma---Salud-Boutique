@@ -8,7 +8,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (!supabase) {
-    return res.status(500).json({ success: false, error: 'Supabase no configurado correctamente.' });
+    return res.status(500).json({ success: false, error: 'Supabase no configurado.' });
   }
 
   const page = parseInt(req.query.page as string || '1');
@@ -49,7 +49,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         total_pages: Math.ceil((count || 0) / limit)
       }
     });
-
   } catch (error: any) {
     console.error('API Products Error:', error);
     return res.status(500).json({

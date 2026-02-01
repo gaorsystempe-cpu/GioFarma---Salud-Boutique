@@ -1,13 +1,11 @@
+
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabase } from '../lib/supabase';
 
-// Fix: Use import with @ts-ignore instead of require to avoid TypeScript "Cannot find name 'require'" error
-// This matches the implementation in other API routes like api/sync/route.ts
 // @ts-ignore
 import OdooClient from '../lib/odoo-client';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Manejar preflight de CORS si fuera necesario (aunque Vercel lo hace por defecto para /api)
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -22,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const startTime = new Date();
   
   if (!supabase) {
-    return res.status(500).json({ success: false, error: 'Supabase no conectado. Verifica las variables VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en Vercel.' });
+    return res.status(500).json({ success: false, error: 'Supabase no conectado. Verifica las variables de entorno.' });
   }
 
   let logEntry: any = null;
@@ -38,7 +36,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .single();
     logEntry = data;
   } catch (logErr) {
-    console.warn('No se pudo crear el log inicial en Supabase:', logErr);
+    console.warn('Sync log creation failed:', logErr);
   }
 
   try {
@@ -47,8 +45,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     if (!odooUrl) throw new Error('VITE_ODOO_URL no configurada');
 
-    // 1. Sincronizar Categorías
-    console.log('Syncing categories...');
     const categories = await odoo.execute('product.category', 'search_read', [[]], {
       fields: ['id', 'name', 'parent_id']
     });
@@ -64,8 +60,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }, { onConflict: 'odoo_id' });
     }
 
-    // 2. Sincronizar Productos
-    console.log('Syncing products...');
     const products = await odoo.execute('product.product', 'search_read', [
       [['sale_ok', '=', true], ['active', '=', true]]
     ], {
@@ -98,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }, { onConflict: 'odoo_id' });
         processedCount++;
       } catch (prodErr) {
-        console.error(`Error procesando producto ${prod.id}:`, prodErr);
+        console.error(`Error processing product ${prod.id}:`, prodErr);
       }
     }
 
@@ -131,7 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     return res.status(500).json({ 
       success: false, 
-      error: error.message || 'Error interno del servidor en el proceso de sincronización' 
+      error: error.message || 'Error en el proceso de sincronización' 
     });
   }
 }

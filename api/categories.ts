@@ -24,7 +24,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       success: true,
       data: data || []
     });
-
   } catch (error: any) {
     console.error('API Categories Error:', error);
     return res.status(500).json({
