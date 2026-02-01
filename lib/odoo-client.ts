@@ -1,6 +1,6 @@
 
 // @ts-ignore
-import xmlrpc from 'xmlrpc';
+import * as xmlrpc from 'xmlrpc';
 
 export default class OdooClient {
   private url: string;
@@ -10,7 +10,6 @@ export default class OdooClient {
   private uid: number | null = null;
 
   constructor() {
-    // Intentar obtener variables de proceso (Vercel) o de import (Vite)
     const rawUrl = process.env.VITE_ODOO_URL || process.env.ODOO_URL || '';
     this.url = rawUrl.replace(/\/$/, '');
     this.db = process.env.VITE_ODOO_DB || process.env.ODOO_DB || '';
@@ -22,22 +21,18 @@ export default class OdooClient {
     if (this.uid !== null) return this.uid;
     
     if (!this.url || !this.db || !this.password || !this.username) {
-      throw new Error(`Configuración de Odoo incompleta en el servidor. Faltan: ${!this.url ? 'URL ' : ''}${!this.db ? 'DB ' : ''}${!this.username ? 'USER ' : ''}${!this.password ? 'KEY' : ''}`);
+      throw new Error(`Configuración de Odoo incompleta. Faltan variables de entorno.`);
     }
 
     const clientUrl = `${this.url}/xmlrpc/2/common`;
-    const common = this.url.startsWith('https') 
+    const common: any = this.url.startsWith('https') 
       ? xmlrpc.createSecureClient(clientUrl) 
       : xmlrpc.createClient(clientUrl);
 
     return new Promise((resolve, reject) => {
-      // Establecer un timeout manual para la conexión
-      const timeout = setTimeout(() => reject(new Error('Timeout conectando con Odoo (15s)')), 15000);
-
       common.methodCall('authenticate', [this.db, this.username, this.password, {}], (error: any, value: any) => {
-        clearTimeout(timeout);
         if (error) return reject(new Error(`Odoo Auth Error: ${error.message}`));
-        if (value === false || value === undefined) return reject(new Error('Autenticación fallida en Odoo. Revisa URL/DB/Usuario/Key.'));
+        if (value === false) return reject(new Error('Autenticación fallida en Odoo.'));
         this.uid = value;
         resolve(value);
       });
@@ -47,7 +42,7 @@ export default class OdooClient {
   async execute(model: string, method: string, args: any[], kwargs: any = {}): Promise<any> {
     const uid = await this.connect();
     const clientUrl = `${this.url}/xmlrpc/2/object`;
-    const models = this.url.startsWith('https') 
+    const models: any = this.url.startsWith('https') 
       ? xmlrpc.createSecureClient(clientUrl) 
       : xmlrpc.createClient(clientUrl);
 

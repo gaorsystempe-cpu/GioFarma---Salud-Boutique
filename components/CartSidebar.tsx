@@ -58,7 +58,7 @@ export const CartSidebar: React.FC<CartSidebarProps> = ({
                   <div className="flex justify-between items-start">
                     <h4 className="font-black text-slate-800 leading-tight text-base tracking-tight italic">{item.name}</h4>
                     <button 
-                      onClick={() => onRemove(item.id)}
+                      onClick={() => onRemove(item.product_id)}
                       className="text-slate-200 hover:text-[#e9118c] transition-colors"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
@@ -67,9 +67,9 @@ export const CartSidebar: React.FC<CartSidebarProps> = ({
                   
                   <div className="flex items-center justify-between mt-5">
                     <div className="flex items-center bg-slate-50 rounded-2xl p-1 border border-slate-100">
-                      <button onClick={() => onUpdateQuantity(item.id, item.quantity - 1)} className="w-8 h-8 flex items-center justify-center hover:bg-white rounded-xl transition-all text-xs font-black shadow-sm">-</button>
+                      <button onClick={() => onUpdateQuantity(item.product_id, item.quantity - 1)} className="w-8 h-8 flex items-center justify-center hover:bg-white rounded-xl transition-all text-xs font-black shadow-sm">-</button>
                       <span className="px-5 text-xs font-black text-slate-900">{item.quantity}</span>
-                      <button onClick={() => onUpdateQuantity(item.id, item.quantity + 1)} className="w-8 h-8 flex items-center justify-center hover:bg-white rounded-xl transition-all text-xs font-black shadow-sm">+</button>
+                      <button onClick={() => onUpdateQuantity(item.product_id, item.quantity + 1)} className="w-8 h-8 flex items-center justify-center hover:bg-white rounded-xl transition-all text-xs font-black shadow-sm">+</button>
                     </div>
                     <span className="text-xl font-black text-slate-900 tracking-tighter italic">S/ {(item.price * item.quantity).toFixed(2)}</span>
                   </div>
