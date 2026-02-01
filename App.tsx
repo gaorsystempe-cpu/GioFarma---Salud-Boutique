@@ -20,12 +20,22 @@ const App: React.FC = () => {
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const [showCheckout, setShowCheckout] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [orderSuccess, setOrderSuccess] = useState<any>(null);
+  const [storeSettings, setStoreSettings] = useState<any>({ store_name: 'GIOFARMA' });
   const [customerEmail, setCustomerEmail] = useState('');
   const [orders, setOrders] = useState<Order[]>([]);
   const [isOdooError, setIsOdooError] = useState(false);
 
   const { items, clearCart, getTotalAmount, getTotalItems, addItem, removeItem, updateQuantity } = useCartStore();
+
+  const fetchStoreSettings = async () => {
+    try {
+      if (!supabase) return;
+      const { data } = await supabase.from('store_settings').select('*').maybeSingle();
+      if (data) setStoreSettings(data);
+    } catch (e) {
+      console.error("Error loading settings", e);
+    }
+  };
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -42,15 +52,51 @@ const App: React.FC = () => {
     } catch (err) {
       console.error('Fetch Error:', err);
       setIsOdooError(true);
+      setProducts([]); 
     } finally {
       setLoading(false);
     }
   }, [currentPage, activeCategory, searchQuery]);
 
   useEffect(() => {
-    OdooService.getCategories().then(setCategories).catch(() => {});
+    fetchStoreSettings();
+    OdooService.getCategories().then(setCategories).catch(() => setCategories([]));
     fetchProducts();
   }, [fetchProducts]);
+
+  const handleFinishOrder = async (details: any) => {
+    try {
+      const result = await OdooService.createOrder({
+        ...details,
+        items: items.map(i => ({
+          product_id: i.product_id,
+          name: i.name,
+          sku: i.sku,
+          price: i.price,
+          quantity: i.quantity
+        }))
+      });
+
+      if (result.success) {
+        // Enviar a WhatsApp si hay número configurado
+        if (storeSettings.whatsapp_number) {
+          const message = `¡Hola! Nuevo pedido de *${details.name}*\n\n` +
+            items.map(i => `• ${i.name} (x${i.quantity})`).join('\n') +
+            `\n\n*Total: S/ ${getTotalAmount().toFixed(2)}*\n` +
+            `Dirección: ${details.address}`;
+          
+          const encoded = encodeURIComponent(message);
+          window.open(`https://wa.me/${storeSettings.whatsapp_number}?text=${encoded}`, '_blank');
+        }
+
+        clearCart();
+        setShowCheckout(false);
+        alert('✅ ¡Pedido recibido! Nos pondremos en contacto contigo pronto.');
+      }
+    } catch (e: any) {
+      alert(`Error al procesar: ${e.message}`);
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -59,8 +105,8 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
           <div className="flex items-center gap-10">
             <div className="cursor-pointer group" onClick={() => setViewMode('catalog')}>
-              <h1 className="text-2xl font-black italic tracking-tighter">
-                GIO<span className="text-[#e9118c]">FARMA</span>
+              <h1 className="text-2xl font-black italic tracking-tighter uppercase">
+                {storeSettings.store_name.split(' ')[0]}<span className="text-[#e9118c]">{storeSettings.store_name.split(' ').slice(1).join(' ') || ''}</span>
               </h1>
             </div>
             
@@ -84,7 +130,7 @@ const App: React.FC = () => {
             </button>
 
             <button 
-              onClick={() => setViewMode('admin')}
+              onClick={() => { setViewMode('admin'); fetchStoreSettings(); }}
               className={`p-3.5 rounded-2xl transition-all ${viewMode === 'admin' ? 'bg-slate-900 text-white shadow-xl' : 'hover:bg-slate-50 text-slate-500'}`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -105,24 +151,14 @@ const App: React.FC = () => {
         </div>
       </nav>
 
-      {/* HERO SECTION - El toque Premium */}
+      {/* HERO SECTION */}
       {viewMode === 'catalog' && (
         <div className="max-w-7xl mx-auto w-full px-6 pt-10 animate-slide-up">
            <div className="bg-slate-900 rounded-[3rem] p-12 lg:p-20 relative overflow-hidden text-white shadow-2xl">
               <div className="relative z-10 max-w-xl">
                  <span className="inline-block bg-[#e9118c] text-[10px] font-black uppercase tracking-[0.4em] px-4 py-2 rounded-full mb-6">Salud & Bienestar</span>
-                 <h2 className="text-4xl lg:text-6xl font-black italic leading-[0.9] tracking-tighter mb-6">Cuidado Médico<br/>de Nivel <span className="text-[#e9118c]">Boutique</span>.</h2>
-                 <p className="text-slate-400 font-medium text-lg leading-relaxed mb-10">Encuentra los mejores medicamentos y productos de cuidado personal con stock real sincronizado de Odoo ERP.</p>
-                 <div className="flex gap-4">
-                    <button className="bg-white text-slate-900 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#e9118c] hover:text-white transition-all">Explorar Ahora</button>
-                    <button className="bg-white/10 backdrop-blur-md px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest border border-white/10 hover:bg-white/20 transition-all">Ver Promociones</button>
-                 </div>
-              </div>
-              <div className="absolute top-0 right-0 w-1/2 h-full hidden lg:block">
-                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#e9118c]/20 blur-[120px] rounded-full"></div>
-                 <div className="absolute top-1/2 right-0 -translate-y-1/2 p-20 opacity-20">
-                    <svg width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="0.5"><path d="M12 2v20M2 12h20M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/></svg>
-                 </div>
+                 <h2 className="text-4xl lg:text-6xl font-black italic leading-[0.9] tracking-tighter mb-6">Salud Pro<br/>de Nivel <span className="text-[#e9118c]">Boutique</span>.</h2>
+                 <p className="text-slate-400 font-medium text-lg leading-relaxed mb-10">Gestionado por {storeSettings.store_name}. Stock real sincronizado directamente de Odoo ERP.</p>
               </div>
            </div>
         </div>
@@ -132,45 +168,22 @@ const App: React.FC = () => {
       <main className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full">
         {viewMode === 'catalog' && (
           <div className="flex flex-col lg:flex-row gap-12">
-            {/* Sidebar Categorías */}
             <aside className="lg:w-64 flex-shrink-0">
               <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm sticky top-32">
                 <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-300 mb-8">Categorías</h3>
                 <div className="flex flex-row lg:flex-col gap-3 overflow-x-auto no-scrollbar pb-2">
-                  <button 
-                    onClick={() => setActiveCategory(null)}
-                    className={`px-5 py-3.5 rounded-2xl text-[11px] font-black text-left transition-all whitespace-nowrap uppercase tracking-wider ${activeCategory === null ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-500 hover:bg-slate-50'}`}
-                  >
-                    Ver Todo
-                  </button>
+                  <button onClick={() => setActiveCategory(null)} className={`px-5 py-3.5 rounded-2xl text-[11px] font-black text-left transition-all uppercase tracking-wider ${activeCategory === null ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>Ver Todo</button>
                   {categories.map(cat => (
-                    <button 
-                      key={cat.id}
-                      onClick={() => setActiveCategory(cat.odoo_id)}
-                      className={`px-5 py-3.5 rounded-2xl text-[11px] font-black text-left transition-all whitespace-nowrap uppercase tracking-wider ${activeCategory === cat.odoo_id ? 'bg-[#e9118c] text-white shadow-xl shadow-pink-100' : 'text-slate-500 hover:bg-slate-50'}`}
-                    >
-                      {cat.name}
-                    </button>
+                    <button key={cat.id} onClick={() => setActiveCategory(cat.odoo_id)} className={`px-5 py-3.5 rounded-2xl text-[11px] font-black text-left transition-all uppercase tracking-wider ${activeCategory === cat.odoo_id ? 'bg-[#e9118c] text-white shadow-xl' : 'text-slate-500 hover:bg-slate-50'}`}>{cat.name}</button>
                   ))}
                 </div>
               </div>
             </aside>
 
-            {/* Grid Productos */}
             <div className="flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                 {loading ? (
-                  [...Array(6)].map((_, i) => (
-                    <div key={i} className="bg-white rounded-[3rem] p-10 space-y-6 border border-slate-100/50 animate-pulse">
-                      <div className="aspect-square bg-slate-50 rounded-[2rem] w-full" />
-                      <div className="h-4 bg-slate-50 rounded-full w-3/4" />
-                      <div className="h-4 bg-slate-50 rounded-full w-1/2" />
-                      <div className="flex justify-between items-center pt-4">
-                         <div className="h-10 bg-slate-50 rounded-xl w-1/3" />
-                         <div className="h-14 w-14 bg-slate-50 rounded-2xl" />
-                      </div>
-                    </div>
-                  ))
+                  [...Array(6)].map((_, i) => <div key={i} className="bg-white rounded-[3rem] p-10 h-96 animate-pulse" />)
                 ) : products.length > 0 ? (
                   products.map(p => (
                     <ProductCard key={p.id} product={p} onAddToCart={(p) => {
@@ -186,12 +199,9 @@ const App: React.FC = () => {
                     }} />
                   ))
                 ) : (
-                  <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border border-slate-100">
-                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-200">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                    </div>
-                    <h3 className="text-2xl font-black italic tracking-tighter">Sin resultados</h3>
-                    <p className="text-slate-400 mt-2 font-medium">No encontramos lo que buscas. Intenta con otro término.</p>
+                  <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border border-slate-100 italic">
+                    <p className="text-slate-400 font-bold">No se encontraron productos.</p>
+                    <p className="text-[10px] uppercase tracking-widest mt-2">Sincroniza con Odoo desde el Panel Admin si es tu primera vez.</p>
                   </div>
                 )}
               </div>
@@ -202,8 +212,14 @@ const App: React.FC = () => {
         {viewMode === 'admin' && <AdminPanel />}
         {viewMode === 'orders' && (
            <div className="max-w-2xl mx-auto py-10 animate-slide-up">
-              <h2 className="text-5xl font-black italic tracking-tighter mb-10">Historial <span className="text-[#e9118c]">Gio</span></h2>
-              {/* Historial logic remains... */}
+              <h2 className="text-5xl font-black italic tracking-tighter mb-10">Mis <span className="text-[#e9118c]">Pedidos</span></h2>
+              <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm mb-12">
+                <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest block mb-4 ml-2">Consulta por Email</label>
+                <div className="flex gap-4">
+                  <input className="flex-1 bg-slate-50 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="tu@email.com" value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
+                  <button onClick={async () => setOrders(await OdooService.getOrdersByEmail(customerEmail))} className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-bold active:scale-95 transition-all">Buscar</button>
+                </div>
+              </div>
            </div>
         )}
       </main>
@@ -215,32 +231,13 @@ const App: React.FC = () => {
         total={getTotalAmount()}
         onUpdateQuantity={updateQuantity}
         onRemove={removeItem}
-        onCheckout={() => {
-          setIsCartOpen(false);
-          setShowCheckout(true);
-        }}
+        onCheckout={() => { setIsCartOpen(false); setShowCheckout(true); }}
       />
 
       <CheckoutModal 
         isOpen={showCheckout}
         onClose={() => setShowCheckout(false)}
-        onSubmit={async (details) => {
-          const result = await OdooService.createOrder({
-            ...details,
-            items: items.map(i => ({
-              product_id: i.product_id,
-              name: i.name,
-              sku: i.sku,
-              price: i.price,
-              quantity: i.quantity
-            }))
-          });
-          if (result.success) {
-            setOrderSuccess(result.data);
-            clearCart();
-            setShowCheckout(false);
-          }
-        }}
+        onSubmit={handleFinishOrder}
         isSubmitting={false}
       />
     </div>

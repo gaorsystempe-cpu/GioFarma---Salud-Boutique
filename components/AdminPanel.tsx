@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 export const AdminPanel: React.FC = () => {
   const [syncLogs, setSyncLogs] = useState<any[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [settings, setSettings] = useState({
     store_name: 'GioFarma',
     whatsapp_number: '',
@@ -19,124 +20,155 @@ export const AdminPanel: React.FC = () => {
   }, []);
 
   const fetchLogs = async () => {
-    const { data } = await supabase!.from('sync_log').select('*').order('started_at', { ascending: false }).limit(5);
-    setSyncLogs(data || []);
+    try {
+      const { data } = await supabase!.from('sync_log').select('*').order('started_at', { ascending: false }).limit(5);
+      setSyncLogs(data || []);
+    } catch (e) {
+      console.error("Error fetching logs", e);
+    }
   };
 
   const fetchSettings = async () => {
-    const { data } = await supabase!.from('store_settings').select('*').single();
-    if (data) setSettings(data);
+    try {
+      const { data } = await supabase!.from('store_settings').select('*').maybeSingle();
+      if (data) setSettings(data);
+    } catch (e) {
+      console.error("Error fetching settings", e);
+    }
   };
 
   const handleManualSync = async () => {
     setIsSyncing(true);
     try {
       const response = await fetch('/api/sync', {
-        headers: { 'Authorization': `Bearer manual-trigger` }
+        headers: { 
+          'Authorization': `Bearer manual-trigger`,
+          'Content-Type': 'application/json'
+        }
       });
       const result = await response.json();
-      alert(result.success ? `Sincronización completada: ${result.processed} productos` : 'Error en sincronización');
-      fetchLogs();
+      
+      if (result.success) {
+        alert(`✅ Éxito: ${result.processed} productos sincronizados.`);
+        fetchLogs();
+      } else {
+        alert(`❌ Error: ${result.error || 'Ocurrió un problema en el servidor'}`);
+      }
     } catch (e) {
-      alert('Error al conectar con el servidor de sincronización');
+      alert('❌ Error de conexión. Revisa los logs de Vercel.');
     } finally {
       setIsSyncing(false);
     }
   };
 
   const saveSettings = async () => {
-    if (!supabase) return alert('Supabase no configurado');
-    const { error } = await supabase.from('store_settings').upsert({ id: 'current_config', ...settings });
-    alert(error ? 'Error al guardar configuración' : 'Configuración actualizada correctamente');
+    if (!supabase) return;
+    setIsSaving(true);
+    try {
+      const { error } = await supabase.from('store_settings').upsert({ 
+        id: 'current_config', 
+        ...settings,
+        updated_at: new Date().toISOString()
+      });
+      if (error) throw error;
+      alert('✅ Configuración guardada correctamente.');
+    } catch (e: any) {
+      alert(`❌ Error al guardar: ${e.message}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
+  // ESTADO DE ERROR / CONFIGURACIÓN
   if (!supabase) {
     return (
-      <div className="p-12 bg-red-50 rounded-[3rem] text-red-600 border border-red-100">
-        <h3 className="text-2xl font-black mb-4">Error de Configuración</h3>
-        <p className="font-bold">Faltan las variables de entorno de Supabase. Revisa tu panel de Vercel.</p>
+      <div className="max-w-2xl mx-auto mt-10 animate-slide-up">
+        <div className="bg-white rounded-[3rem] p-12 shadow-2xl border border-slate-100 text-center">
+          <div className="w-24 h-24 bg-pink-50 text-[#e9118c] rounded-full flex items-center justify-center mx-auto mb-8">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 16h.01"/><path d="M12 8v4"/><path d="M15.312 2a2 2 0 0 1 1.664 1.135l5.223 12.385a4 4 0 0 1-3.664 5.48H5.465a4 4 0 0 1-3.664-5.48l5.223-12.385A2 2 0 0 1 8.688 2h6.624z"/></svg>
+          </div>
+          <h2 className="text-3xl font-black italic tracking-tighter mb-4">Configuración Requerida</h2>
+          <p className="text-slate-500 font-medium mb-10 leading-relaxed">
+            Las variables de Supabase en Vercel deben tener el prefijo <code className="bg-slate-100 px-2 py-1 rounded text-[#e9118c] font-bold">VITE_</code> para que el catálogo pueda funcionar.
+          </p>
+          
+          <div className="space-y-4 text-left bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Pasos para activar:</h4>
+            <div className="flex gap-4 items-start">
+              <span className="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">1</span>
+              <p className="text-xs font-bold text-slate-600">En Vercel, renombra <code className="text-[#e9118c]">SUPABASE_URL</code> a <code className="text-[#e9118c]">VITE_SUPABASE_URL</code></p>
+            </div>
+            <div className="flex gap-4 items-start">
+              <span className="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">2</span>
+              <p className="text-xs font-bold text-slate-600">Renombra <code className="text-[#e9118c]">SUPABASE_ANON_KEY</code> a <code className="text-[#e9118c]">VITE_SUPABASE_ANON_KEY</code></p>
+            </div>
+            <div className="flex gap-4 items-start">
+              <span className="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">3</span>
+              <p className="text-xs font-bold text-slate-600">Haz un <strong>Redeploy</strong> en la pestaña "Deployments" de Vercel.</p>
+            </div>
+          </div>
+          
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-10 w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-black transition-all"
+          >
+            Ya lo hice, Reintentar conexión
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-12 animate-fade-in">
+    <div className="max-w-4xl mx-auto space-y-12 animate-slide-up pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
           <h2 className="text-5xl font-black italic tracking-tighter">Panel <span className="text-[#e9118c]">Admin</span></h2>
-          <p className="text-slate-400 font-medium mt-2">Gestión de datos de empresa y sincronización Odoo ERP</p>
+          <p className="text-slate-400 font-medium mt-2">Control total de stock Odoo & Configuración Boutique</p>
         </div>
         <button 
           onClick={handleManualSync}
           disabled={isSyncing}
-          className="bg-slate-900 text-white px-10 py-5 rounded-2xl font-bold flex items-center gap-4 active:scale-95 transition-all shadow-2xl shadow-slate-200 disabled:opacity-50"
+          className="bg-slate-900 text-white px-10 py-5 rounded-2xl font-bold flex items-center gap-4 active:scale-95 transition-all shadow-2xl shadow-slate-200 disabled:opacity-50 btn-premium group"
         >
-          {isSyncing ? 'Procesando...' : 'Sincronizar ahora'}
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className={isSyncing ? 'animate-spin' : ''}><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+          {isSyncing ? 'Sincronizando...' : 'Sincronizar con Odoo'}
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className={`${isSyncing ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`}><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
         </button>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-10">
-        {/* Historial Sync */}
         <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Estado de Sincronización</h3>
-            <span className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
-          </div>
-          <div className="space-y-4">
-            {syncLogs.length > 0 ? syncLogs.map(log => (
-              <div key={log.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-3xl border border-slate-100/50">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-300 mb-8">Log de Conexión</h3>
+          <div className="space-y-3">
+            {syncLogs.map(log => (
+              <div key={log.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-3xl border border-slate-100/30">
                 <div>
-                  <span className="font-black text-slate-800 text-sm block">{new Date(log.started_at).toLocaleTimeString()}</span>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{new Date(log.started_at).toLocaleDateString()}</span>
+                  <span className="font-black text-slate-800 text-sm block tracking-tight">{new Date(log.started_at).toLocaleTimeString()}</span>
+                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{new Date(log.started_at).toLocaleDateString()}</span>
                 </div>
                 <div className="text-right">
-                  <span className={`text-[10px] font-black px-3 py-1.5 rounded-full ${log.status === 'success' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                    {log.status === 'success' ? `${log.records_processed} PRODS` : 'FALLIDO'}
+                  <span className={`text-[10px] font-black px-4 py-2 rounded-xl italic ${log.status === 'success' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+                    {log.status === 'success' ? `+${log.records_processed} PRODS` : 'ERROR'}
                   </span>
                 </div>
               </div>
-            )) : (
-              <p className="text-center text-slate-400 py-10 italic">No hay registros de sincronización</p>
-            )}
+            ))}
           </div>
         </div>
 
-        {/* Configuración */}
         <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm space-y-8">
-          <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Datos de la Farmacia</h3>
-          <div className="space-y-5">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-300">Identidad Digital</h3>
+          <div className="space-y-6">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Nombre Comercial</label>
-              <input 
-                className="w-full bg-slate-50 rounded-2xl px-6 py-4 text-sm font-bold outline-none border-2 border-transparent focus:border-slate-100 transition-all"
-                value={settings.store_name}
-                onChange={e => setSettings({...settings, store_name: e.target.value})}
-              />
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Nombre Farmacia</label>
+              <input className="w-full bg-slate-50 rounded-2xl px-6 py-4 text-sm font-bold outline-none" value={settings.store_name} onChange={e => setSettings({...settings, store_name: e.target.value})} />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">WhatsApp Pedidos</label>
-              <input 
-                placeholder="519XXXXXXXX"
-                className="w-full bg-slate-50 rounded-2xl px-6 py-4 text-sm font-bold outline-none border-2 border-transparent focus:border-slate-100 transition-all"
-                value={settings.whatsapp_number}
-                onChange={e => setSettings({...settings, whatsapp_number: e.target.value})}
-              />
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">WhatsApp Ventas</label>
+              <input placeholder="Ej: 51987654321" className="w-full bg-slate-50 rounded-2xl px-6 py-4 text-sm font-bold outline-none" value={settings.whatsapp_number} onChange={e => setSettings({...settings, whatsapp_number: e.target.value})} />
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Cuentas Bancarias / Pago</label>
-              <textarea 
-                rows={3}
-                className="w-full bg-slate-50 rounded-2xl px-6 py-4 text-sm font-bold outline-none border-2 border-transparent focus:border-slate-100 transition-all resize-none"
-                value={settings.payment_instructions_bank}
-                onChange={e => setSettings({...settings, payment_instructions_bank: e.target.value})}
-              />
-            </div>
-            <button 
-              onClick={saveSettings}
-              className="w-full bg-[#e9118c] text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all shadow-xl shadow-pink-100 mt-4"
-            >
-              Guardar Configuración
+            <button onClick={saveSettings} disabled={isSaving} className="w-full bg-[#e9118c] text-white py-5 rounded-2xl font-black text-[11px] uppercase tracking-[0.3em] shadow-xl shadow-pink-100 disabled:opacity-50">
+              {isSaving ? 'Guardando...' : 'Guardar Configuración'}
             </button>
           </div>
         </div>

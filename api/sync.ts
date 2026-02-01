@@ -6,15 +6,21 @@ import OdooClient from '../lib/odoo-client';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization;
+  // Secreto preferido de Vercel, si no, usamos el disparador manual interno
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  // Si hay un secreto configurado en Vercel, lo validamos.
+  // Si viene del Admin UI (manual-trigger), permitimos el paso para facilitar la configuración inicial.
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && authHeader !== `Bearer manual-trigger`) {
     return res.status(401).json({ success: false, error: 'No autorizado' });
   }
 
   const startTime = new Date();
-  const odoo = new OdooClient();
   
+  if (!supabase) {
+    return res.status(500).json({ success: false, error: 'Supabase no conectado' });
+  }
+
   const { data: logEntry } = await supabase
     .from('sync_log')
     .insert({
@@ -26,6 +32,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .single();
 
   try {
+    const odoo = new OdooClient();
+    
+    // 1. Sincronizar Categorías
     const categories = await odoo.execute('product.category', 'search_read', [[]], {
       fields: ['id', 'name', 'parent_id']
     });
@@ -36,10 +45,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         odoo_id: cat.id,
         name: cat.name,
         parent_id: cat.parent_id ? cat.parent_id[0] : null,
-        parent_name: cat.parent_id ? cat.parent_id[1] : null
+        parent_name: cat.parent_id ? cat.parent_id[1] : null,
+        active: true
       }, { onConflict: 'odoo_id' });
     }
 
+    // 2. Sincronizar Productos
     const products = await odoo.execute('product.product', 'search_read', [
       [['sale_ok', '=', true], ['active', '=', true]]
     ], {
@@ -95,6 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
   } catch (error: any) {
+    console.error('Sync error:', error);
     if (logEntry) {
       await supabase.from('sync_log').update({
         status: 'error',

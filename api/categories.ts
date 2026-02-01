@@ -7,6 +7,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ success: false, error: 'Método no permitido' });
   }
 
+  if (!supabase) {
+    return res.status(500).json({ success: false, error: 'Base de datos no configurada.' });
+  }
+
   try {
     const { data, error } = await supabase
       .from('categories')
@@ -25,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('API Categories Error:', error);
     return res.status(500).json({
       success: false,
-      error: 'No se pudieron cargar los departamentos.'
+      error: 'No se pudieron cargar las categorías.'
     });
   }
 }

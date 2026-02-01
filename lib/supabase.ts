@@ -2,25 +2,34 @@
 import { createClient } from '@supabase/supabase-js';
 
 const getEnv = (key: string) => {
-  try {
-    // @ts-ignore
-    return (typeof process !== 'undefined' && process.env ? process.env[key] : null) || 
-           // @ts-ignore
-           (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env[key] : null) || 
-           '';
-  } catch {
-    return '';
-  }
+  // @ts-ignore
+  const env = import.meta.env || {};
+  // @ts-ignore
+  const proc = (typeof process !== 'undefined' && process.env) ? process.env : {};
+
+  // Prioridad: VITE_KEY > KEY
+  return (
+    env[`VITE_${key}`] || 
+    proc[`VITE_${key}`] || 
+    env[key] || 
+    proc[key] || 
+    proc[`NEXT_PUBLIC_${key}`] ||
+    ''
+  );
 };
 
-const supabaseUrl = getEnv('NEXT_PUBLIC_SUPABASE_URL');
-const supabaseAnonKey = getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY') || getEnv('SUPABASE_SERVICE_ROLE_KEY');
+const supabaseUrl = getEnv('SUPABASE_URL');
+const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY');
 
-// Solo inicializamos si tenemos la URL, para evitar el Uncaught Error
-export const supabase = supabaseUrl 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
-  : null;
+// Verificación estricta: URL válida y Key con longitud mínima
+const isValid = 
+  typeof supabaseUrl === 'string' && 
+  supabaseUrl.startsWith('http') && 
+  typeof supabaseAnonKey === 'string' && 
+  supabaseAnonKey.length > 20;
 
-if (!supabase) {
-  console.error('CRITICAL: Supabase keys are missing. App will run in limited mode.');
+export const supabase = isValid ? createClient(supabaseUrl, supabaseAnonKey) : null;
+
+if (!isValid) {
+  console.warn('⚠️ Configuración de Supabase incompleta. Verifica VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en Vercel.');
 }

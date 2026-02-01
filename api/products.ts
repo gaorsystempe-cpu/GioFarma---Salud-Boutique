@@ -7,6 +7,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ success: false, error: 'Método no permitido' });
   }
 
+  // Si supabase no está inicializado, devolvemos error amigable
+  if (!supabase) {
+    return res.status(500).json({ success: false, error: 'Base de datos no configurada.' });
+  }
+
   const page = parseInt(req.query.page as string || '1');
   const limit = parseInt(req.query.limit as string || '12');
   const categoryId = req.query.category as string;
@@ -18,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select('*', { count: 'exact' })
       .eq('active', true);
 
-    if (categoryId) {
+    if (categoryId && categoryId !== 'null') {
       query = query.eq('category_id', categoryId);
     }
 
@@ -50,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('API Products Error:', error);
     return res.status(500).json({
       success: false,
-      error: 'Error al conectar con el servidor.'
+      error: 'Error al conectar con el servidor de datos.'
     });
   }
 }

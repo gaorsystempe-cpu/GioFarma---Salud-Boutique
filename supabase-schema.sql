@@ -1,5 +1,5 @@
 
--- Tabla para configuraciones generales de la tienda
+-- 1. TABLA DE CONFIGURACIÓN (Faltante en la captura)
 CREATE TABLE IF NOT EXISTS store_settings (
   id TEXT PRIMARY KEY DEFAULT 'current_config',
   store_name TEXT DEFAULT 'GioFarma',
@@ -16,5 +16,19 @@ INSERT INTO store_settings (id, store_name)
 VALUES ('current_config', 'GioFarma')
 ON CONFLICT (id) DO NOTHING;
 
--- Ampliar log de sincronización
-ALTER TABLE sync_log ADD COLUMN IF NOT EXISTS trigger_type TEXT DEFAULT 'manual';
+-- 2. PERMISOS DE LECTURA (Importante para que el frontend vea los datos)
+ALTER TABLE store_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura pública de configuración" ON store_settings;
+CREATE POLICY "Permitir lectura pública de configuración" ON store_settings FOR SELECT USING (true);
+
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura pública de productos" ON products;
+CREATE POLICY "Permitir lectura pública de productos" ON products FOR SELECT USING (true);
+
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura pública de categorías" ON categories;
+CREATE POLICY "Permitir lectura pública de categorías" ON categories FOR SELECT USING (true);
+
+ALTER TABLE sync_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura pública de logs" ON sync_log;
+CREATE POLICY "Permitir lectura pública de logs" ON sync_log FOR SELECT USING (true);
