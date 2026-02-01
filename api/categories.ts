@@ -17,16 +17,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (error) throw error;
 
     res.setHeader('Content-Type', 'application/json');
-    return res.status(200).json({
+    return res.send(JSON.stringify({
       success: true,
       data: data || []
-    });
+    }));
 
   } catch (error: any) {
     console.error('API Categories Error:', error);
-    return res.status(500).json({
+    res.setHeader('Content-Type', 'application/json');
+    return res.status(500).send(JSON.stringify({
       success: false,
       error: 'No se pudieron cargar los departamentos.'
-    });
+    }));
   }
 }
