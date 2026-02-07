@@ -10,7 +10,6 @@ export default class OdooClient {
   private uid: number | null = null;
 
   constructor() {
-    // Detectamos variables tanto en local (VITE_) como en Vercel (sin prefijo)
     const rawUrl = process.env.VITE_ODOO_URL || process.env.ODOO_URL || '';
     this.url = rawUrl.replace(/\/$/, '');
     this.db = process.env.VITE_ODOO_DB || process.env.ODOO_DB || '';
@@ -18,32 +17,39 @@ export default class OdooClient {
     this.password = process.env.VITE_ODOO_API_KEY || process.env.ODOO_API_KEY || '';
   }
 
+  private getClient(path: string) {
+    // xmlrpc prefiere la URL completa o un objeto. Usaremos URL completa validada.
+    const fullUrl = `${this.url}${path}`;
+    
+    // @ts-ignore - Manejo de interoperabilidad ESM/CJS para xmlrpc en Vercel
+    const clientModule = (xmlrpc.default && xmlrpc.default.createClient) ? xmlrpc.default : xmlrpc;
+    
+    return this.url.startsWith('https') 
+      ? clientModule.createSecureClient(fullUrl) 
+      : clientModule.createClient(fullUrl);
+  }
+
   async connect(): Promise<number> {
     if (this.uid !== null) return this.uid;
     
     if (!this.url || !this.db || !this.password || !this.username) {
-      throw new Error(`Configuración de Odoo incompleta. Faltan variables de entorno.`);
+      const missing = [];
+      if (!this.url) missing.push('ODOO_URL');
+      if (!this.db) missing.push('ODOO_DB');
+      if (!this.username) missing.push('ODOO_USERNAME');
+      if (!this.password) missing.push('ODOO_API_KEY');
+      throw new Error(`Faltan variables: ${missing.join(', ')}`);
     }
 
-    // Aseguramos que la URL tenga el formato correcto para xmlrpc
-    const baseUrl = this.url.includes('://') ? this.url : `https://${this.url}`;
-    const clientUrl = `${baseUrl}/xmlrpc/2/common`;
-    
-    // @ts-ignore - Manejo de compatibilidad ESM/CJS para xmlrpc
-    const clientCreator = (xmlrpc.default && xmlrpc.default.createClient) ? xmlrpc.default : xmlrpc;
-    
-    const common: any = baseUrl.startsWith('https') 
-      ? clientCreator.createSecureClient(clientUrl) 
-      : clientCreator.createClient(clientUrl);
+    const common = this.getClient('/xmlrpc/2/common');
 
     return new Promise((resolve, reject) => {
-      // Timeout de 10 segundos para no bloquear la función de Vercel
-      const timer = setTimeout(() => reject(new Error('Timeout conectando a Odoo (10s)')), 10000);
-
+      const timeout = setTimeout(() => reject(new Error('Timeout de conexión a Odoo (8s)')), 8000);
+      
       common.methodCall('authenticate', [this.db, this.username, this.password, {}], (error: any, value: any) => {
-        clearTimeout(timer);
-        if (error) return reject(new Error(`Odoo Auth Error: ${error.message}`));
-        if (value === false || value === undefined) return reject(new Error('Autenticación fallida en Odoo. Verifica tus credenciales.'));
+        clearTimeout(timeout);
+        if (error) return reject(new Error(`Error Odoo (Auth): ${error.message}`));
+        if (value === false || value === undefined) return reject(new Error('Credenciales de Odoo inválidas.'));
         this.uid = value;
         resolve(value);
       });
@@ -52,22 +58,14 @@ export default class OdooClient {
 
   async execute(model: string, method: string, args: any[], kwargs: any = {}): Promise<any> {
     const uid = await this.connect();
-    const baseUrl = this.url.includes('://') ? this.url : `https://${this.url}`;
-    const clientUrl = `${baseUrl}/xmlrpc/2/object`;
-    
-    // @ts-ignore
-    const clientCreator = (xmlrpc.default && xmlrpc.default.createClient) ? xmlrpc.default : xmlrpc;
-    
-    const models: any = baseUrl.startsWith('https') 
-      ? clientCreator.createSecureClient(clientUrl) 
-      : clientCreator.createClient(clientUrl);
+    const models = this.getClient('/xmlrpc/2/object');
 
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`Timeout ejecutando ${model}.${method} (15s)`)), 15000);
-      
+      const timeout = setTimeout(() => reject(new Error(`Timeout en ${model}.${method} (10s)`)), 10000);
+
       models.methodCall('execute_kw', [this.db, uid, this.password, model, method, args, kwargs], (error: any, value: any) => {
-        clearTimeout(timer);
-        if (error) return reject(new Error(`Odoo Execute Error (${model}.${method}): ${error.message}`));
+        clearTimeout(timeout);
+        if (error) return reject(new Error(`Error Odoo (${model}.${method}): ${error.message}`));
         resolve(value);
       });
     });
@@ -100,21 +98,13 @@ export default class OdooClient {
       const orderId = await this.execute('sale.order', 'create', [{
         partner_id: partnerId,
         order_line: orderLines,
-        origin: 'Catálogo Web GioFarma',
+        origin: 'Tienda Web GioFarma',
         note: orderData.notes || ''
       }]);
 
-      const orderInfo = await this.execute('sale.order', 'read', [[orderId]], { fields: ['name'] });
-
-      return {
-        order_id: orderId,
-        order_name: orderInfo[0].name,
-        partner_id: partnerId,
-        success: true
-      };
+      return { order_id: orderId, partner_id: partnerId, success: true };
     } catch (error: any) {
-      console.error('Odoo Integration Error:', error.message);
-      throw error;
+      throw new Error(`Fallo integración Odoo: ${error.message}`);
     }
   }
 }
